@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Energy Radar Pro</title>
+    <!-- 引入字体图标 -->
+    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #0A84FF;
+            --success-color: #30D158;
+            --danger-color: #FF453A;
+            --bg-glass: rgba(28, 28, 30, 0.85);
+            --text-main: #FFFFFF;
+            --text-sub: #8E8E93;
+            --border-glass: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; background: #000; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
+        
+        /* 地图层 */
+        #map-container { width: 100%; height: 100%; z-index: 1; }
+
+        /* UI 通用组件 */
+        .glass-panel {
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: var(--border-glass);
+            color: var(--text-main);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 顶部 HUD 信息栏 */
+        .top-hud {
+            position: absolute;
+            top: 20px;
+            left: 15px;
+            right: 15px;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .live-dot {
+            width: 8px; height: 8px; background: var(--success-color); border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        .config-btn {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* 底部控制台 */
+        .bottom-console {
+            position: absolute;
+            bottom: 30px;
+            left: 15px;
+            right: 15px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .info-card {
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--text-sub);
+            min-height: 40px;
+        }
+        .info-highlight { color: var(--primary-color); font-weight: bold; font-size: 15px; }
+
+        .action-bar {
+            display: flex;
+            gap: 10px;
+            height: 56px;
+        }
+
+        .mode-btn {
+            flex: 1;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+            opacity: 0.6;
+            background: rgba(44, 44, 46, 0.9);
+            color: var(--text-sub);
+            border: 1px solid transparent;
+        }
+        
+        .mode-btn.active {
+            opacity: 1;
+            transform: scale(1.02);
+            color: white;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+        }
+        .mode-btn.elec.active { background: linear-gradient(135deg, #00C6FB, #005BEA); border-color: #00C6FB; }
+        .mode-btn.gas.active { background: linear-gradient(135deg, #F5576C, #F093FB); border-color: #F5576C; }
+
+        /* 设置弹窗 */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .modal-overlay.show { opacity: 1; }
+        
+        .settings-box {
+            width: 85%;
+            max-width: 400px;
+            padding: 24px;
+        }
+        .settings-box h2 { margin-top: 0; color: white; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
+        
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; color: var(--text-sub); margin-bottom: 8px; font-size: 12px; }
+        .input-group input, .input-group select {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 12px;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        .save-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        /* 自定义标记样式 */
+        .custom-marker {
+            width: 36px; height: 36px;
+            background: white;
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            position: relative;
+            font-size: 18px;
+        }
+        .custom-marker::after {
+            content: '';
+            position: absolute;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            border: 2px solid white;
+            animation: ripple 1.5s infinite;
+            opacity: 0;
+        }
+        .marker-elec { color: #005BEA; }
+        .marker-gas { color: #F5576C; }
+
+        /* 动画 */
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        @keyframes ripple { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.6); opacity: 0; } }
+
+        /* 信息窗体覆盖 */
+        .amap-info-content {
+            background: rgba(30, 30, 30, 0.95) !important;
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            padding: 15px !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .amap-info-sharp { border-top-color: rgba(30,30,30,0.95) !important; }
+        .poi-title { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+        .poi-dist { color: var(--primary-color); font-weight: bold; font-size: 14px; }
+        .poi-addr { color: #aaa; font-size: 12px; margin: 8px 0 12px 0; line-height: 1.4; }
+        .nav-btn {
+            display: block; width: 100%; text-align: center;
+            background: var(--primary-color); color: white;
+            text-decoration: none; padding: 10px 0;
+            border-radius: 8px; font-weight: bold;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 地图 -->
+    <div id="map-container"></div>
+
+    <!-- 顶部 HUD -->
+    <div class="top-hud glass-panel">
+        <div class="status-indicator">
+            <div class="live-dot"></div>
+            <span id="gps-status">GPS 搜索中...</span>
+        </div>
+        <button class="config-btn" onclick="openSettings()"><i class="fas fa-cog"></i></button>
+    </div>
+
+    <!-- 底部控制 -->
+    <div class="bottom-console">
+        <!-- 信息反馈 -->
+        <div class="info-card glass-panel" id="msg-card" style="display:none">
+            <span>附近发现 <span id="res-count" class="info-highlight">0</span> 个补能点</span>
+            <span id="refresh-hint">自动刷新开启</span>
+        </div>
+
+        <!-- 模式切换 -->
+        <div class="action-bar">
+            <button class="mode-btn elec" id="btn-elec" onclick="switchMode('充电站')">
+                <i class="fas fa-bolt"></i> 找充电
+            </button>
+            <button class="mode-btn gas" id="btn-gas" onclick="switchMode('加油站')">
+                <i class="fas fa-gas-pump"></i> 找加油
+            </button>
+        </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="glass-panel settings-box">
+            <h2><i class="fas fa-shield-alt"></i> API 设置 (BYOK)</h2>
+            <div class="input-group">
+                <label>高德 Key (Web端 JS API)</label>
+                <input type="text" id="input-key" placeholder="输入您的 Key">
+            </div>
+            <div class="input-group">
+                <label>安全密钥 (jscode)</label>
+                <input type="text" id="input-code" placeholder="输入您的密钥">
+            </div>
+            <div class="input-group">
+                <label>自动搜索范围 (米)</label>
+                <select id="input-radius">
+                    <option value="3000">3 公里</option>
+                    <option value="5000" selected>5 公里 (高速推荐)</option>
+                    <option value="10000">10 公里</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>自动刷新距离阈值 (米)</label>
+                <select id="input-threshold">
+                    <option value="1000">1 公里</option>
+                    <option value="2000" selected>2 公里 (推荐)</option>
+                    <option value="5000">5 公里</option>
+                </select>
+            </div>
+            <button class="save-btn" onclick="saveSettings()">保存并在本地重启</button>
+            <p style="text-align:center; font-size:12px; color:rgba(255,255,255,0.4); margin-top:10px;">
+                * 您的 Key 仅存储在本地浏览器，不会上传服务器。
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // --- 核心配置与状态 ---
+        const CONFIG = {
+            key: localStorage.getItem('er_key'),
+            code: localStorage.getItem('er_code'),
+            radius: parseInt(localStorage.getItem('er_radius')) || 5000,
+            threshold: parseInt(localStorage.getItem('er_threshold')) || 2000,
+        };
+
+        let state = {
+            map: null,
+            geolocation: null,
+            placeSearch: null,
+            currentMode: null, // '充电站' or '加油站'
+            lastSearchPos: null, // 上次搜索时的坐标 [lng, lat]
+            currentPos: null,    // 实时坐标
+            markers: [],
+            isFirstLoad: true
+        };
+
+        // --- 1. 初始化入口 ---
+        function init() {
+            if (!CONFIG.key || !CONFIG.code) {
+                document.getElementById('settings-modal').style.display = 'flex';
+                setTimeout(() => document.getElementById('settings-modal').classList.add('show'), 10);
+            } else {
+                loadMapScript();
+                keepScreenOn(); // 尝试保持屏幕常亮
+            }
+        }
+
+        // --- 2. 动态加载地图 ---
+        function loadMapScript() {
+            window._AMapSecurityConfig = { securityJsCode: CONFIG.code };
+            
+            const script = document.createElement('script');
+            script.src = `https://webapi.amap.com/maps?v=2.0&key=${CONFIG.key}&plugin=AMap.PlaceSearch,AMap.Geolocation,AMap.MoveAnimation`;
+            script.onload = initMap;
+            script.onerror = () => alert('地图加载失败，请检查Key是否正确');
+            document.head.appendChild(script);
+        }
+
+        // --- 3. 地图逻辑 ---
+        function initMap() {
+            state.map = new AMap.Map('map-container', {
+                resizeEnable: true,
+                zoom: 15,
+                viewMode: '3D',
+                pitch: 50, // 倾斜角度，更像导航视角
+                mapStyle: 'amap://styles/darkblue', // 深色夜间模式
+                showLabel: true
+            });
+
+            // 定位配置
+            state.geolocation = new AMap.Geolocation({
+                enableHighAccuracy: true,
+                timeout: 10000,
+                zoomToAccuracy: false, // 不要每次自动缩放
+                buttonPosition: 'RB',
+                showCircle: false, // 不显示精度圈，视觉更干净
+                showMarker: true,
+                panToLocation: false // 我们手动控制移动
+            });
+
+            state.map.addControl(state.geolocation);
+
+            // 实时位置监听 (Watch Position)
+            state.geolocation.watchPosition();
+            AMap.event.addListener(state.geolocation, 'complete', onLocationUpdate);
+            AMap.event.addListener(state.geolocation, 'error', (err) => {
+                document.getElementById('gps-status').innerText = "GPS 信号弱";
+                document.getElementById('gps-status').style.color = "#FF453A";
+            });
+        }
+
+        // --- 4. 位置更新核心逻辑 (智能刷新) ---
+        function onLocationUpdate(data) {
+            state.currentPos = data.position;
+            
+            // 更新 UI 状态
+            document.getElementById('gps-status').innerText = `车速: ${(data.speed * 3.6).toFixed(0)} km/h`;
+            document.getElementById('gps-status').style.color = "#30D158";
+
+            // 首次定位：居中并默认搜索充电站
+            if (state.isFirstLoad) {
+                state.map.setZoomAndCenter(15, state.currentPos);
+                state.isFirstLoad = false;
+                // 默认选中充电
+                switchMode('充电站');
+                return;
+            }
+
+            // 平滑移动地图中心 (跟随模式)
+            // 如果用户正在拖动地图，暂时不要强制回中，以免干扰
+            // 这里简化处理：始终平滑跟随
+            state.map.panTo(state.currentPos);
+
+            // 判断是否需要重新搜索
+            if (state.currentMode && shouldRefreshSearch()) {
+                console.log("触发距离刷新...");
+                doSearch(state.currentMode);
+            }
+        }
+
+        // 计算距离判断是否刷新
+        function shouldRefreshSearch() {
+            if (!state.lastSearchPos) return true;
+            const distance = AMap.GeometryUtil.distance(state.currentPos, state.lastSearchPos);
+            // 距离上次搜索点超过阈值 (如2km)
+            return distance > CONFIG.threshold;
+        }
+
+        // --- 5. 搜索与标记逻辑 ---
+        function switchMode(mode) {
+            state.currentMode = mode;
+            
+            // 按钮 UI 切换
+            document.getElementById('btn-elec').classList.remove('active');
+            document.getElementById('btn-gas').classList.remove('active');
+            
+            if(mode === '充电站') document.getElementById('btn-elec').classList.add('active');
+            else document.getElementById('btn-gas').classList.add('active');
+
+            // 立即搜索
+            doSearch(mode);
+        }
+
+        function doSearch(keyword) {
+            if (!state.currentPos || !state.map) return;
+
+            // 记录本次搜索的位置
+            state.lastSearchPos = state.currentPos;
+            
+            // 清理地图
+            state.map.remove(state.markers);
+            state.markers = [];
+
+            if (!state.placeSearch) {
+                state.placeSearch = new AMap.PlaceSearch({
+                    type: keyword,
+                    pageSize: 20,
+                    pageIndex: 1,
+                    city: '全国',
+                    extensions: 'base'
+                });
+            } else {
+                state.placeSearch.setType(keyword);
+            }
+
+            // 执行搜索
+            state.placeSearch.searchNearBy(keyword, state.currentPos, CONFIG.radius, (status, result) => {
+                if (status === 'complete' && result.info === 'OK') {
+                    renderMarkers(result.poiList.pois, keyword);
+                    updateInfoPanel(result.poiList.count, keyword);
+                    speak(`附近发现${result.poiList.count}个${keyword}`);
+                } else {
+                    updateInfoPanel(0, keyword);
+                }
+            });
+        }
+
+        function renderMarkers(pois, type) {
+            const iconClass = type === '充电站' ? 'fa-bolt' : 'fa-gas-pump';
+            const colorClass = type === '充电站' ? 'marker-elec' : 'marker-gas';
+
+            pois.forEach(poi => {
+                // 自定义 Marker DOM
+                const content = `
+                    <div class="custom-marker ${colorClass}">
+                        <i class="fas ${iconClass}"></i>
+                    </div>
+                `;
+
+                const marker = new AMap.Marker({
+                    position: poi.location,
+                    content: content,
+                    offset: new AMap.Pixel(-18, -18), // 中心对齐
+                    map: state.map,
+                    zIndex: 100
+                });
+
+                // 点击事件
+                marker.on('click', () => showInfoWindow(poi));
+                state.markers.push(marker);
+            });
+        }
+
+        // --- 6. 导航交互 ---
+        function showInfoWindow(poi) {
+            const content = `
+                <div class="poi-title">${poi.name}</div>
+                <div class="poi-dist">直线距离 ${poi.distance} 米</div>
+                <div class="poi-addr">${poi.address || '暂无详细地址'}</div>
+                <a class="nav-btn" href="https://uri.amap.com/navigation?from=${state.currentPos.lng},${state.currentPos.lat},我的位置&to=${poi.location.lng},${poi.location.lat},${poi.name}&mode=car&policy=1&callnative=1">
+                    <i class="fas fa-location-arrow"></i> 立即导航
+                </a>
+            `;
+
+            const infoWindow = new AMap.InfoWindow({
+                isCustom: false, // 使用高德默认外框逻辑，但覆盖样式
+                content: content,
+                offset: new AMap.Pixel(0, -35)
+            });
+
+            infoWindow.open(state.map, poi.location);
+        }
+
+        // --- 7. 辅助功能 ---
+        function updateInfoPanel(count, type) {
+            const panel = document.getElementById('msg-card');
+            panel.style.display = 'flex';
+            document.getElementById('res-count').innerText = count;
+            
+            // 简单的淡入动画
+            panel.style.opacity = 0;
+            setTimeout(() => panel.style.opacity = 1, 50);
+        }
+
+        // TTS 语音播报
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 1.0;
+                utterance.lang = 'zh-CN';
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // 保持屏幕常亮 (Wake Lock API)
+        async function keepScreenOn() {
+            try {
+                if ('wakeLock' in navigator) {
+                    await navigator.wakeLock.request('screen');
+                    console.log('Screen Wake Lock active');
+                }
+            } catch (err) {
+                console.log(`${err.name}, ${err.message}`);
+            }
+        }
+
+        // --- 8. 设置管理 ---
+        function openSettings() {
+            const modal = document.getElementById('settings-modal');
+            modal.style.display = 'flex';
+            
+            // 填充旧值
+            document.getElementById('input-key').value = CONFIG.key || '';
+            document.getElementById('input-code').value = CONFIG.code || '';
+            document.getElementById('input-radius').value = CONFIG.radius;
+            document.getElementById('input-threshold').value = CONFIG.threshold;
+
+            setTimeout(() => modal.classList.add('show'), 10);
+        }
+
+        function saveSettings() {
+            const key = document.getElementById('input-key').value.trim();
+            const code = document.getElementById('input-code').value.trim();
+            
+            if(!key || !code) {
+                alert('API Key 和 密钥是必须的！');
+                return;
+            }
+
+            localStorage.setItem('er_key', key);
+            localStorage.setItem('er_code', code);
+            localStorage.setItem('er_radius', document.getElementById('input-radius').value);
+            localStorage.setItem('er_threshold', document.getElementById('input-threshold').value);
+
+            location.reload();
+        }
+
+        // 启动
+        init();
+
+    </script>
+</body>
+</html>
